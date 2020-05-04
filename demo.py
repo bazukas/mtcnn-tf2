@@ -30,7 +30,6 @@ def demo(video=None, output=None):
 
         bboxes, landmarks = mtcnn.detect(img)
         frames += 1
-        print(bboxes, landmarks)
         img = draw_faces(img, bboxes, landmarks)
 
         cv2.imshow('demo', img)
