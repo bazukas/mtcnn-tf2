@@ -1,3 +1,4 @@
+import tensorflow as tf
 from tensorflow.keras import Model, layers
 
 
@@ -19,6 +20,9 @@ class PNet(Model):
         self.conv4_1 = layers.Conv2D(2, 1, 1, name='conv4_1')
         self.conv4_2 = layers.Conv2D(4, 1, 1, name='conv4_2')
 
+    @tf.function(
+        input_signature=[tf.TensorSpec(shape=(None, None, None, 3),
+                                       dtype=tf.float32)])
     def call(self, x):
         for l in self.features:
             x = l(x)
@@ -59,6 +63,9 @@ class RNet(Model):
         self.dense5_1 = layers.Dense(2, name='dense5_1')
         self.dense5_2 = layers.Dense(4, name='dense5_2')
 
+    @tf.function(
+        input_signature=[tf.TensorSpec(shape=(None, 24, 24, 3),
+                                       dtype=tf.float32)])
     def call(self, x):
         for l in self.features:
             x = l(x)
@@ -105,6 +112,9 @@ class ONet(Model):
         self.dense6_2 = layers.Dense(4, name='dense6_2')
         self.dense6_3 = layers.Dense(10, name='dense6_3')
 
+    @tf.function(
+        input_signature=[tf.TensorSpec(shape=(None, 48, 48, 3),
+                                       dtype=tf.float32)])
     def call(self, x):
         for l in self.features:
             x = l(x)

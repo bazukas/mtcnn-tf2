@@ -48,7 +48,7 @@ def calibrate_box(bboxes, offsets):
     return bboxes[:, 0:4] + translation
 
 
-def get_image_boxes(bounding_boxes, img, size=24):
+def get_image_boxes(bounding_boxes, img, height, width, num_boxes, size=24):
     """Cut out boxes from the image.
 
     Arguments:
@@ -60,19 +60,18 @@ def get_image_boxes(bounding_boxes, img, size=24):
         a float numpy array of shape [n, size, size, 3].
     """
 
-    if bounding_boxes.shape[0] == 0:
+    if num_boxes == 0:
         return tf.zeros((0, size, size, 3))
-    height, width, _ = img.shape
 
-    x1, y1, x2, y2 = _correct_bboxes(bounding_boxes, width, height)
+    x1, y1, x2, y2 = _correct_bboxes(bounding_boxes, height, width)
     boxes = tf.stack([y1, x1, y2, x2], 1)
     img_boxes = tf.image.crop_and_resize(tf.expand_dims(img, 0), boxes,
-                                         tf.zeros(boxes.shape[0], dtype=tf.int32),
+                                         tf.zeros(num_boxes, dtype=tf.int32),
                                          (size, size))
     return img_boxes
 
 
-def _correct_bboxes(bboxes, width, height):
+def _correct_bboxes(bboxes, height, width):
     """Crop boxes that are too big and get coordinates
     with respect to cutouts.
 
@@ -91,3 +90,30 @@ def _correct_bboxes(bboxes, width, height):
     x2 = tf.math.minimum(bboxes[:, 2], width - 1.0) / width
     y2 = tf.math.minimum(bboxes[:, 3], height - 1.0) / height
     return x1, y1, x2, y2
+
+
+def generate_bboxes(probs, offsets, scale, threshold):
+    # applying P-Net is equivalent, in some sense, to
+    # moving 12x12 window with stride 2
+    stride = 2
+    cell_size = 12
+
+    # indices of boxes where there is probably a face
+    inds = tf.where(probs > threshold)
+    if inds.shape[0] == 0:
+        return tf.zeros((0, 9))
+
+    offsets = tf.gather_nd(offsets[0, :, :, :], inds)
+    score = tf.expand_dims(tf.gather_nd(probs, inds), axis=1)
+
+    # P-Net is applied to scaled images
+    # so we need to rescale bounding boxes back
+    inds = tf.cast(inds, tf.float32)
+    bounding_boxes = tf.concat([
+        tf.expand_dims(tf.math.round((stride * inds[:, 1] + 1) / scale), 1),
+        tf.expand_dims(tf.math.round((stride * inds[:, 0] + 1) / scale), 1),
+        tf.expand_dims(tf.math.round((stride * inds[:, 1] + 1 + cell_size) / scale), 1),
+        tf.expand_dims(tf.math.round((stride * inds[:, 0] + 1 + cell_size) / scale), 1),
+        score, offsets
+    ], 1)
+    return bounding_boxes
