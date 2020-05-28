@@ -68,6 +68,7 @@ def get_image_boxes(bounding_boxes, img, height, width, num_boxes, size=24):
     img_boxes = tf.image.crop_and_resize(tf.expand_dims(img, 0), boxes,
                                          tf.zeros(num_boxes, dtype=tf.int32),
                                          (size, size))
+    img_boxes = preprocess(img_boxes)
     return img_boxes
 
 
@@ -117,3 +118,8 @@ def generate_bboxes(probs, offsets, scale, threshold):
         score, offsets
     ], 1)
     return bounding_boxes
+
+
+def preprocess(img):
+    img = (img - 127.5) * 0.0078125
+    return img

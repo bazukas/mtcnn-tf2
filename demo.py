@@ -28,7 +28,7 @@ def demo(video=None, output=None):
         if img is None:
             break
 
-        bboxes, landmarks = mtcnn.detect(img)
+        bboxes, landmarks, scores = mtcnn.detect(img)
         frames += 1
         img = draw_faces(img, bboxes, landmarks)
 
@@ -49,6 +49,11 @@ def draw_faces(img, bboxes, landmarks):
     for box in bboxes:
         img = cv2.rectangle(img, (int(box[0]), int(box[1])),
                             (int(box[2]), int(box[3])), (255, 0, 0), 2)
+    for landmark in landmarks:
+        for i in range(5):
+            x = int(landmark[i])
+            y = int(landmark[i + 5])
+            img = cv2.circle(img, (x, y), 1, (0, 255, 0))
     return img
 
 

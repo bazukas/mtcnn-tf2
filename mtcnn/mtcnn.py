@@ -1,6 +1,6 @@
 import tensorflow as tf
 from .nets import PNet, RNet, ONet
-from .box_utils import calibrate_box, convert_to_square, get_image_boxes, generate_bboxes
+from .box_utils import calibrate_box, convert_to_square, get_image_boxes, generate_bboxes, preprocess
 
 
 DEF_THRESHOLDS = [0.6, 0.7, 0.8]
@@ -22,15 +22,16 @@ class MTCNN(object):
         self.max_output_size = max_output_size
 
     def detect(self, img):
-        img = self.preprocess(img)
+        img = tf.convert_to_tensor(img, tf.float32)
         bboxes = self.stage_one(img)
         if len(bboxes) == 0:
-            return [], []
+            return [], [], []
         bboxes = self.stage_two(img, bboxes, img.shape[0], img.shape[1], bboxes.shape[0])
         if len(bboxes) == 0:
-            return [], []
-        bboxes, landmarks = self.stage_three(img, bboxes, img.shape[0], img.shape[1], bboxes.shape[0])
-        return bboxes, landmarks
+            return [], [], []
+        bboxes, landmarks, scores = self.stage_three(img, bboxes,
+                                                     img.shape[0], img.shape[1], bboxes.shape[0])
+        return bboxes, landmarks, scores
 
     def get_scales(self, height, width):
         min_length = min(height, width)
@@ -50,10 +51,6 @@ class MTCNN(object):
             factor_count += 1
         return scales
 
-    def preprocess(self, img):
-        img = (img - 127.5) * 0.0078125
-        return img
-
     @tf.function(
         input_signature=[tf.TensorSpec(shape=(1, None, None, 3), dtype=tf.float32),
                          tf.TensorSpec(shape=(), dtype=tf.float32)])
@@ -67,8 +64,9 @@ class MTCNN(object):
         boxes = generate_bboxes(probs, offsets, scale, self.thresholds[0])
         if len(boxes) == 0:
             return boxes[:, 0:4], boxes[:, 5:], boxes[:, 4]
-        keep = tf.image.non_max_suppression(boxes[:, 0:4], boxes[:, 4],
-                                            self.max_output_size, iou_threshold=0.5)
+        keep = tf.image.non_max_suppression(boxes[:, 0:4], boxes[:, 4], self.max_output_size,
+                                            iou_threshold=0.5)
+
         boxes = tf.gather(boxes, keep)
         return boxes[:, 0:4], boxes[:, 5:], boxes[:, 4]
 
@@ -80,13 +78,15 @@ class MTCNN(object):
         offsets = []
         scores = []
 
-        img = tf.expand_dims(img, 0)
         # run P-Net on different scales
         for s in scales:
             # scale the image and convert it to a float array
             hs = tf.math.ceil(height * s)
             ws = tf.math.ceil(width * s)
-            bb, o, s = self.stage_one_scale(tf.image.resize(img, (hs, ws)), s)
+            img_in = tf.image.resize(img, (hs, ws))
+            img_in = preprocess(img_in)
+            img_in = tf.expand_dims(img_in, 0)
+            bb, o, s = self.stage_one_scale(img_in, s)
             bboxes.append(bb)
             offsets.append(o)
             scores.append(s)
@@ -101,7 +101,6 @@ class MTCNN(object):
                                             iou_threshold=self.nms_thresholds[0])
         bboxes = tf.gather(bboxes, keep)
         offsets = tf.gather(offsets, keep)
-        scores = tf.gather(scores, keep)
 
         # use offsets predicted by pnet to transform bounding boxes
         bboxes = calibrate_box(bboxes, offsets)
@@ -160,4 +159,5 @@ class MTCNN(object):
                                             self.max_output_size, self.nms_thresholds[2])
         bboxes = tf.gather(bboxes, keep)
         landmarks = tf.gather(landmarks, keep)
-        return bboxes, landmarks
+        scores = tf.gather(scores, keep)
+        return bboxes, landmarks, scores
