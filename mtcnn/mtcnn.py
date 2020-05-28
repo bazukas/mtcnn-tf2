@@ -12,7 +12,7 @@ class MTCNN(object):
                  min_face_size=20.0,
                  thresholds=None,
                  nms_thresholds=None,
-                 max_output_size=100):
+                 max_output_size=300):
         self.pnet = PNet.load(pnet_path)
         self.rnet = RNet.load(rnet_path)
         self.onet = ONet.load(onet_path)
@@ -57,26 +57,23 @@ class MTCNN(object):
     def stage_one_scale(self, img, scale):
 
         offsets, probs = self.pnet(img)
-        probs = probs[0, :, :, 1]
         # probs: probability of a face at each sliding window
         # offsets: transformations to true bounding boxes
 
-        boxes = generate_bboxes(probs, offsets, scale, self.thresholds[0])
+        boxes = generate_bboxes(probs[0], offsets[0], scale, self.thresholds[0])
         if len(boxes) == 0:
-            return boxes[:, 0:4], boxes[:, 5:], boxes[:, 4]
+            return boxes
         keep = tf.image.non_max_suppression(boxes[:, 0:4], boxes[:, 4], self.max_output_size,
                                             iou_threshold=0.5)
 
         boxes = tf.gather(boxes, keep)
-        return boxes[:, 0:4], boxes[:, 5:], boxes[:, 4]
+        return boxes
 
     def stage_one(self, img):
         height, width, _ = img.shape
         scales = self.get_scales(height, width)
 
-        bboxes = []
-        offsets = []
-        scores = []
+        boxes = []
 
         # run P-Net on different scales
         for s in scales:
@@ -86,25 +83,20 @@ class MTCNN(object):
             img_in = tf.image.resize(img, (hs, ws))
             img_in = preprocess(img_in)
             img_in = tf.expand_dims(img_in, 0)
-            bb, o, s = self.stage_one_scale(img_in, s)
-            bboxes.append(bb)
-            offsets.append(o)
-            scores.append(s)
+            boxes.append(self.stage_one_scale(img_in, s))
         # collect boxes (and offsets, and scores) from different scales
-        bboxes = tf.concat(bboxes, 0)
-        offsets = tf.concat(offsets, 0)
-        scores = tf.concat(scores, 0)
-        if len(bboxes) == 0:
-            return bboxes
+        boxes = tf.concat(boxes, 0)
+        if boxes.shape[0] == 0:
+            return tf.zeros((0, 4))
+
+        bboxes, scores, offsets = boxes[:, :4], boxes[:, 4], boxes[:, 5:]
+        # use offsets predicted by pnet to transform bounding boxes
+        bboxes = calibrate_box(bboxes, offsets)
+        bboxes = convert_to_square(bboxes)
 
         keep = tf.image.non_max_suppression(bboxes, scores, self.max_output_size,
                                             iou_threshold=self.nms_thresholds[0])
         bboxes = tf.gather(bboxes, keep)
-        offsets = tf.gather(offsets, keep)
-
-        # use offsets predicted by pnet to transform bounding boxes
-        bboxes = calibrate_box(bboxes, offsets)
-        bboxes = convert_to_square(bboxes)
         return bboxes
 
     @tf.function(
@@ -120,14 +112,14 @@ class MTCNN(object):
         keep = tf.where(probs[:, 1] > self.thresholds[1])[:, 0]
         bboxes = tf.gather(bboxes, keep)
         offsets = tf.gather(offsets, keep)
-        scores = tf.reshape(tf.gather(probs[:, 1], keep), [-1])
+        scores = tf.gather(probs[:, 1], keep)
+
+        bboxes = calibrate_box(bboxes, offsets)
+        bboxes = convert_to_square(bboxes)
 
         keep = tf.image.non_max_suppression(bboxes, scores,
                                             self.max_output_size, self.nms_thresholds[1])
         bboxes = tf.gather(bboxes, keep)
-        offsets = tf.gather(offsets, keep)
-        bboxes = calibrate_box(bboxes, offsets)
-        bboxes = convert_to_square(bboxes)
         return bboxes
 
     @tf.function(
@@ -143,7 +135,7 @@ class MTCNN(object):
         keep = tf.where(probs[:, 1] > self.thresholds[2])[:, 0]
         bboxes = tf.gather(bboxes, keep)
         offsets = tf.gather(offsets, keep)
-        scores = tf.reshape(tf.gather(probs[:, 1], keep), [-1])
+        scores = tf.gather(probs[:, 1], keep)
         landmarks = tf.gather(landmarks, keep)
 
         # compute landmark points

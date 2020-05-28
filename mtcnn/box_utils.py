@@ -12,13 +12,13 @@ def convert_to_square(bboxes):
             squared bounding boxes.
     """
     x1, y1, x2, y2 = [bboxes[:, i] for i in range(4)]
-    h = y2 - y1 + 1.0
-    w = x2 - x1 + 1.0
+    h = y2 - y1
+    w = x2 - x1
     max_side = tf.maximum(h, w)
     dx1 = x1 + w * 0.5 - max_side * 0.5
     dy1 = y1 + h * 0.5 - max_side * 0.5
-    dx2 = dx1 + max_side - 1.0
-    dy2 = dy1 + max_side - 1.0
+    dx2 = dx1 + max_side
+    dy2 = dy1 + max_side
     return tf.stack([
         tf.math.round(dx1),
         tf.math.round(dy1),
@@ -39,13 +39,11 @@ def calibrate_box(bboxes, offsets):
         an array of shape [n, 4], bboxes
     """
     x1, y1, x2, y2 = [bboxes[:, i] for i in range(4)]
-    w = x2 - x1 + 1.0
-    h = y2 - y1 + 1.0
-    w = tf.expand_dims(w, 1)
-    h = tf.expand_dims(h, 1)
+    w = x2 - x1
+    h = y2 - y1
 
-    translation = tf.concat([w, h, w, h], 1) * offsets
-    return bboxes[:, 0:4] + translation
+    translation = tf.stack([w, h, w, h], 1) * offsets
+    return bboxes + translation
 
 
 def get_image_boxes(bounding_boxes, img, height, width, num_boxes, size=24):
@@ -77,8 +75,7 @@ def _correct_bboxes(bboxes, height, width):
     with respect to cutouts.
 
     Arguments:
-        bboxes: a float numpy array of shape [n, 5],
-            where each row is (xmin, ymin, xmax, ymax, score).
+        bboxes: a float numpy array of shape [n, 4]
         width: a float number.
         height: a float number.
 
@@ -88,8 +85,8 @@ def _correct_bboxes(bboxes, height, width):
     """
     x1 = tf.math.maximum(bboxes[:, 0], 0.0) / width
     y1 = tf.math.maximum(bboxes[:, 1], 0.0) / height
-    x2 = tf.math.minimum(bboxes[:, 2], width - 1.0) / width
-    y2 = tf.math.minimum(bboxes[:, 3], height - 1.0) / height
+    x2 = tf.math.minimum(bboxes[:, 2], width) / width
+    y2 = tf.math.minimum(bboxes[:, 3], height) / height
     return x1, y1, x2, y2
 
 
@@ -99,22 +96,27 @@ def generate_bboxes(probs, offsets, scale, threshold):
     stride = 2
     cell_size = 12
 
+    probs = probs[:, :, 1]
     # indices of boxes where there is probably a face
+    # inds: N x 2
     inds = tf.where(probs > threshold)
     if inds.shape[0] == 0:
         return tf.zeros((0, 9))
 
-    offsets = tf.gather_nd(offsets[0, :, :, :], inds)
+    # offsets: N x 4
+    offsets = tf.gather_nd(offsets, inds)
+    # score: N x 1
     score = tf.expand_dims(tf.gather_nd(probs, inds), axis=1)
 
     # P-Net is applied to scaled images
     # so we need to rescale bounding boxes back
     inds = tf.cast(inds, tf.float32)
+    # bounding_boxes: N x 9
     bounding_boxes = tf.concat([
-        tf.expand_dims(tf.math.round((stride * inds[:, 1] + 1) / scale), 1),
-        tf.expand_dims(tf.math.round((stride * inds[:, 0] + 1) / scale), 1),
-        tf.expand_dims(tf.math.round((stride * inds[:, 1] + 1 + cell_size) / scale), 1),
-        tf.expand_dims(tf.math.round((stride * inds[:, 0] + 1 + cell_size) / scale), 1),
+        tf.expand_dims(tf.math.round((stride * inds[:, 1]) / scale), 1),
+        tf.expand_dims(tf.math.round((stride * inds[:, 0]) / scale), 1),
+        tf.expand_dims(tf.math.round((stride * inds[:, 1] + cell_size) / scale), 1),
+        tf.expand_dims(tf.math.round((stride * inds[:, 0] + cell_size) / scale), 1),
         score, offsets
     ], 1)
     return bounding_boxes

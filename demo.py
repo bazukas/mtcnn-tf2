@@ -27,8 +27,9 @@ def demo(video=None, output=None):
         _, img = vid.read()
         if img is None:
             break
+        img_in = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-        bboxes, landmarks, scores = mtcnn.detect(img)
+        bboxes, landmarks, scores = mtcnn.detect(img_in)
         frames += 1
         img = draw_faces(img, bboxes, landmarks)
 
