@@ -52,13 +52,23 @@ class MTCNN(object):
         return scales
 
     @tf.function(
-        input_signature=[tf.TensorSpec(shape=(1, None, None, 3), dtype=tf.float32),
+        input_signature=[tf.TensorSpec(shape=(None, None, 3), dtype=tf.float32),
+                         tf.TensorSpec(shape=(), dtype=tf.float32),
+                         tf.TensorSpec(shape=(), dtype=tf.float32),
                          tf.TensorSpec(shape=(), dtype=tf.float32)])
-    def stage_one_scale(self, img, scale):
+    def stage_one_scale(self, img, height, width, scale):
+        hs = tf.math.ceil(height * scale)
+        ws = tf.math.ceil(width * scale)
+        img_in = tf.image.resize(img, (hs, ws))
+        img_in = preprocess(img_in)
+        img_in = tf.expand_dims(img_in, 0)
+        img_in = tf.transpose(img_in, (0, 2, 1, 3))
 
-        offsets, probs = self.pnet(img)
+        offsets, probs = self.pnet(img_in)
         # probs: probability of a face at each sliding window
         # offsets: transformations to true bounding boxes
+        offsets = tf.transpose(offsets, (0, 2, 1, 3))
+        probs = tf.transpose(probs, (0, 2, 1, 3))
 
         boxes = generate_bboxes(probs[0], offsets[0], scale, self.thresholds[0])
         if len(boxes) == 0:
@@ -77,13 +87,7 @@ class MTCNN(object):
 
         # run P-Net on different scales
         for s in scales:
-            # scale the image and convert it to a float array
-            hs = tf.math.ceil(height * s)
-            ws = tf.math.ceil(width * s)
-            img_in = tf.image.resize(img, (hs, ws))
-            img_in = preprocess(img_in)
-            img_in = tf.expand_dims(img_in, 0)
-            boxes.append(self.stage_one_scale(img_in, s))
+            boxes.append(self.stage_one_scale(img, height, width, s))
         # collect boxes (and offsets, and scores) from different scales
         boxes = tf.concat(boxes, 0)
         if boxes.shape[0] == 0:
@@ -107,6 +111,7 @@ class MTCNN(object):
                          tf.TensorSpec(shape=(), dtype=tf.int32)])
     def stage_two(self, img, bboxes, height, width, num_boxes):
         img_boxes = get_image_boxes(bboxes, img, height, width, num_boxes, size=24)
+        img_boxes = tf.transpose(img_boxes, (0, 2, 1, 3))
         offsets, probs = self.rnet(img_boxes)
 
         keep = tf.where(probs[:, 1] > self.thresholds[1])[:, 0]
@@ -130,6 +135,7 @@ class MTCNN(object):
                          tf.TensorSpec(shape=(), dtype=tf.int32)])
     def stage_three(self, img, bboxes, height, width, num_boxes):
         img_boxes = get_image_boxes(bboxes, img, height, width, num_boxes, size=48)
+        img_boxes = tf.transpose(img_boxes, (0, 2, 1, 3))
         landmarks, offsets, probs = self.onet(img_boxes)
 
         keep = tf.where(probs[:, 1] > self.thresholds[2])[:, 0]

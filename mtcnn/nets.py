@@ -54,7 +54,6 @@ class RNet(Model):
             layers.Conv2D(64, 2, 1, name='conv3'),
             layers.PReLU(shared_axes=[1, 2], name='prelu3'),
 
-            layers.Permute((3, 1, 2), name='permute'),
             layers.Flatten(name='flatten'),
             layers.Dense(128, name='dense4'),
             layers.PReLU(name='prelu4'),
@@ -101,10 +100,8 @@ class ONet(Model):
             layers.Conv2D(128, 2, 1, name='conv4'),
             layers.PReLU(shared_axes=[1, 2], name='prelu4'),
 
-            layers.Permute((3, 1, 2), name='permute'),
             layers.Flatten(name='flatten'),
             layers.Dense(256, name='dense5'),
-            layers.Dropout(0.25, name='drop5'),
             layers.PReLU(name='prelu5'),
         ]
 
