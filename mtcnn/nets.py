@@ -3,6 +3,10 @@ from tensorflow.keras import Model, layers
 
 
 class PNet(Model):
+    """ Proposal Network, receives an image and outputs
+    bbox offset regressions and confidence scores for each sliding
+    window of 12x12
+    """
     def __init__(self):
         super(PNet, self).__init__()
         self.features = [
@@ -40,6 +44,10 @@ class PNet(Model):
 
 
 class RNet(Model):
+    """ Refine Network, receives image crops from PNet and outputs
+    further offset refinements and confidence scores to filter out
+    the predictions
+    """
     def __init__(self):
         super(RNet, self).__init__()
         self.features = [
@@ -82,6 +90,10 @@ class RNet(Model):
 
 
 class ONet(Model):
+    """ Output Network, receives image crops from RNet and outputs
+    final offset regressions, facial landmark positions and confidence scores
+    """
+
     def __init__(self):
         super(ONet, self).__init__()
         self.features = [

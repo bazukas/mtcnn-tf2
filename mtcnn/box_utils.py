@@ -4,12 +4,11 @@ import tensorflow as tf
 def convert_to_square(bboxes):
     """Convert bounding boxes to a square form.
 
-    Arguments:
-        bboxes: a float numpy array of shape [n, 4].
+    Parameters:
+        bboxes: float tensor of shape [n, 4]
 
     Returns:
-        a float numpy array of shape [n, 4],
-            squared bounding boxes.
+        float tensor of shape [n, 4]
     """
     x1, y1, x2, y2 = [bboxes[:, i] for i in range(4)]
     h = y2 - y1
@@ -28,15 +27,15 @@ def convert_to_square(bboxes):
 
 
 def calibrate_box(bboxes, offsets):
-    """Transform bounding boxes to be more like true bounding boxes.
-    'offsets' is one of the outputs of the nets.
+    """Use offsets returned by a network to
+    correct the bounding box coordinates.
 
-    Arguments:
-        bboxes: a float numpy array of shape [n, 4].
-        offsets: a float numpy array of shape [n, 4].
+    Parameters:
+        bboxes: float tensor of shape [n, 4].
+        offsets: float tensor of shape [n, 4].
 
     Returns:
-        an array of shape [n, 4], bboxes
+        float tensor of shape [n, 4]
     """
     x1, y1, x2, y2 = [bboxes[:, i] for i in range(4)]
     w = x2 - x1
@@ -46,22 +45,27 @@ def calibrate_box(bboxes, offsets):
     return bboxes + translation
 
 
-def get_image_boxes(bounding_boxes, img, height, width, num_boxes, size=24):
+def get_image_boxes(bboxes, img, height, width, num_boxes, size=24):
     """Cut out boxes from the image.
 
-    Arguments:
-        bounding_boxes: a float numpy array of shape [n, 4].
+    Parameters:
+        bboxes: float tensor of shape [n, 4]
         img: image tensor
-        size: an integer, size of cutouts.
+        height: float, image height
+        width: float, image width
+        num_boxes: int, number of rows in bboxes
+        size: int, size of cutouts
 
     Returns:
-        a float numpy array of shape [n, size, size, 3].
+        float tensor of shape [n, size, size, 3]
     """
-
     if num_boxes == 0:
         return tf.zeros((0, size, size, 3))
 
-    x1, y1, x2, y2 = _correct_bboxes(bounding_boxes, height, width)
+    x1 = tf.math.maximum(bboxes[:, 0], 0.0) / width
+    y1 = tf.math.maximum(bboxes[:, 1], 0.0) / height
+    x2 = tf.math.minimum(bboxes[:, 2], width) / width
+    y2 = tf.math.minimum(bboxes[:, 3], height) / height
     boxes = tf.stack([y1, x1, y2, x2], 1)
     img_boxes = tf.image.crop_and_resize(tf.expand_dims(img, 0), boxes,
                                          tf.zeros(num_boxes, dtype=tf.int32),
@@ -70,27 +74,18 @@ def get_image_boxes(bounding_boxes, img, height, width, num_boxes, size=24):
     return img_boxes
 
 
-def _correct_bboxes(bboxes, height, width):
-    """Crop boxes that are too big and get coordinates
-    with respect to cutouts.
+def generate_bboxes(probs, offsets, scale, threshold):
+    """Convert output of PNet to bouding boxes tensor.
 
-    Arguments:
-        bboxes: a float numpy array of shape [n, 4]
-        width: a float number.
-        height: a float number.
+    Parameters:
+        probs: float tensor of shape [p, m, 2], output of PNet
+        offsets: float tensor of shape [p, m, 4], output of PNet
+        scale: float, scale of the input image
+        threshold: float, confidence threshold
 
     Returns:
-        x1, y1, x2, y2: a int numpy arrays of shape [n],
-            corrected xmin, ymin, xmax, ymax.
+        float tensor of shape [n, 9]
     """
-    x1 = tf.math.maximum(bboxes[:, 0], 0.0) / width
-    y1 = tf.math.maximum(bboxes[:, 1], 0.0) / height
-    x2 = tf.math.minimum(bboxes[:, 2], width) / width
-    y2 = tf.math.minimum(bboxes[:, 3], height) / height
-    return x1, y1, x2, y2
-
-
-def generate_bboxes(probs, offsets, scale, threshold):
     # applying P-Net is equivalent, in some sense, to
     # moving 12x12 window with stride 2
     stride = 2
@@ -123,5 +118,13 @@ def generate_bboxes(probs, offsets, scale, threshold):
 
 
 def preprocess(img):
+    """Preprocess image tensor before applying a network.
+
+    Parameters:
+        img: image tensor
+
+    Returns:
+        float tensor with shape of img
+    """
     img = (img - 127.5) * 0.0078125
     return img

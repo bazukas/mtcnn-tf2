@@ -8,6 +8,7 @@ DEF_NMS_THRESHOLDS = [0.7, 0.7, 0.7]
 
 
 class MTCNN(object):
+    """ Top level class for mtcnn detection """
     def __init__(self, pnet_path, rnet_path, onet_path,
                  min_face_size=20.0,
                  thresholds=None,
@@ -22,6 +23,17 @@ class MTCNN(object):
         self.max_output_size = max_output_size
 
     def detect(self, img):
+        """Detect faces and facial landmarks on an image
+
+        Parameters:
+            img: rgb image, numpy array of shape [h, w, 3]
+
+        Returns:
+            bboxes: float tensor of shape [n, 4], face bounding boxes
+            landmarks: float tensor of shape [n, 10], 5 facial landmarks,
+                        first 5 numbers of array are x coords, last are y coords
+            scores: float tensor of shape [n], confidence scores
+        """
         img = tf.convert_to_tensor(img, tf.float32)
         bboxes = self.stage_one(img)
         if len(bboxes) == 0:
@@ -34,6 +46,15 @@ class MTCNN(object):
         return bboxes, landmarks, scores
 
     def get_scales(self, height, width):
+        """Compute scaling factors for given image dimensions
+
+        Parameters:
+            height: float
+            width: float
+
+        Returns:
+            list of floats, scaling factors
+        """
         min_length = min(height, width)
         min_detection_size = 12
         factor = 0.707  # sqrt(0.5)
@@ -57,6 +78,17 @@ class MTCNN(object):
                          tf.TensorSpec(shape=(), dtype=tf.float32),
                          tf.TensorSpec(shape=(), dtype=tf.float32)])
     def stage_one_scale(self, img, height, width, scale):
+        """Perform stage one part with a given scaling factor
+
+        Parameters:
+            img: rgb image, float tensor of shape [h, w, 3]
+            height: image height, float
+            width: image width, float
+            scale: scaling factor, float
+
+        Returns:
+            float tensor of shape [n, 9]
+        """
         hs = tf.math.ceil(height * scale)
         ws = tf.math.ceil(width * scale)
         img_in = tf.image.resize(img, (hs, ws))
@@ -80,6 +112,14 @@ class MTCNN(object):
         return boxes
 
     def stage_one(self, img):
+        """Run stage one on the input image
+
+        Parameters:
+            img: rgb image, float tensor of shape [h, w, 3]
+
+        Returns:
+            float tensor of shape [n, 4], predicted bounding boxes
+        """
         height, width, _ = img.shape
         scales = self.get_scales(height, width)
 
@@ -110,6 +150,18 @@ class MTCNN(object):
                          tf.TensorSpec(shape=(), dtype=tf.float32),
                          tf.TensorSpec(shape=(), dtype=tf.int32)])
     def stage_two(self, img, bboxes, height, width, num_boxes):
+        """Run stage two on the input image
+
+        Parameters:
+            img: rgb image, float tensor of shape [h, w, 3]
+            bboxes: bounding boxes from stage one, float tensor of shape [n, 4]
+            height: image height, float
+            width: image width, float
+            num_boxes: number of rows in bboxes, int
+
+        Returns:
+            float tensor of shape [n, 4], predicted bounding boxes
+        """
         img_boxes = get_image_boxes(bboxes, img, height, width, num_boxes, size=24)
         img_boxes = tf.transpose(img_boxes, (0, 2, 1, 3))
         offsets, probs = self.rnet(img_boxes)
@@ -134,6 +186,21 @@ class MTCNN(object):
                          tf.TensorSpec(shape=(), dtype=tf.float32),
                          tf.TensorSpec(shape=(), dtype=tf.int32)])
     def stage_three(self, img, bboxes, height, width, num_boxes):
+        """Run stage three on the input image
+
+        Parameters:
+            img: rgb image, float tensor of shape [h, w, 3]
+            bboxes: bounding boxes from stage two, float tensor of shape [n, 4]
+            height: image height, float
+            width: image width, float
+            num_boxes: number of rows in bboxes, int
+
+        Returns:
+            bboxes: float tensor of shape [n, 4], face bounding boxes
+            landmarks: float tensor of shape [n, 10], 5 facial landmarks,
+                        first 5 numbers of array are x coords, last are y coords
+            scores: float tensor of shape [n], confidence scores
+        """
         img_boxes = get_image_boxes(bboxes, img, height, width, num_boxes, size=48)
         img_boxes = tf.transpose(img_boxes, (0, 2, 1, 3))
         landmarks, offsets, probs = self.onet(img_boxes)

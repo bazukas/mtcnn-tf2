@@ -6,6 +6,7 @@ from mtcnn.mtcnn import MTCNN
 
 
 def demo(video=None, output=None):
+    """ mtcnn webcab demo function """
     mtcnn = MTCNN('weights/pnet.h5', 'weights/rnet.h5', 'weights/onet.h5')
     if video is None:
         vid = cv2.VideoCapture(0)
@@ -46,6 +47,7 @@ def demo(video=None, output=None):
 
 
 def draw_faces(img, bboxes, landmarks):
+    """ draw bounding boxes and facial landmarks on the image """
     h, w, _ = img.shape
     for box in bboxes:
         img = cv2.rectangle(img, (int(box[0]), int(box[1])),
