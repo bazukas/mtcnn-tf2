@@ -27,4 +27,4 @@ python3 demo.py --image_input /path/to/image.jpg --image_output /path/to/output.
 
 ## Examples
 
-[Example](img/ex1.jpg)
+![Example](img/ex1.jpg)
