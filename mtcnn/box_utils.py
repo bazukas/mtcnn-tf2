@@ -59,9 +59,6 @@ def get_image_boxes(bboxes, img, height, width, num_boxes, size=24):
     Returns:
         float tensor of shape [n, size, size, 3]
     """
-    if num_boxes == 0:
-        return tf.zeros((0, size, size, 3))
-
     x1 = tf.math.maximum(bboxes[:, 0], 0.0) / width
     y1 = tf.math.maximum(bboxes[:, 1], 0.0) / height
     x2 = tf.math.minimum(bboxes[:, 2], width) / width
