@@ -10,7 +10,9 @@ class PNet(Model):
     def __init__(self):
         super(PNet, self).__init__()
         self.features = [
-            layers.Conv2D(10, 3, 1, input_shape=(12, 12, 3), name='conv1'),
+            # permute needed because of imported weights
+            layers.Permute((2, 1, 3), name='permute'),
+            layers.Conv2D(10, 3, 1, name='conv1'),
             layers.PReLU(shared_axes=[1, 2], name='prelu1'),
             layers.MaxPool2D(2, 2, padding='same', name='pool1'),
 
@@ -33,6 +35,9 @@ class PNet(Model):
         a = self.conv4_1(x)
         b = self.conv4_2(x)
         a = layers.Softmax()(a)
+        # permute needed because of imported weights
+        a = tf.transpose(a, (0, 2, 1, 3))
+        b = tf.transpose(b, (0, 2, 1, 3))
         return b, a
 
     @classmethod
@@ -51,6 +56,8 @@ class RNet(Model):
     def __init__(self):
         super(RNet, self).__init__()
         self.features = [
+            # permute needed because of imported weights
+            layers.Permute((2, 1, 3), name='permute'),
             layers.Conv2D(28, 3, 1, input_shape=(24, 24, 3), name='conv1'),
             layers.PReLU(shared_axes=[1, 2], name='prelu1'),
             layers.MaxPool2D(3, 2, padding='same', name='pool1'),
@@ -97,6 +104,8 @@ class ONet(Model):
     def __init__(self):
         super(ONet, self).__init__()
         self.features = [
+            # permute needed because of imported weights
+            layers.Permute((2, 1, 3), name='permute'),
             layers.Conv2D(32, 3, 1, input_shape=(48, 48, 3), name='conv1'),
             layers.PReLU(shared_axes=[1, 2], name='prelu1'),
             layers.MaxPool2D(3, 2, padding='same', name='pool1'),

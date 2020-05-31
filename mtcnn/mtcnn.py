@@ -3,8 +3,8 @@ from .nets import PNet, RNet, ONet
 from .box_utils import calibrate_box, convert_to_square, get_image_boxes, generate_bboxes, preprocess
 
 
-DEF_THRESHOLDS = [0.6, 0.7, 0.8]
-DEF_NMS_THRESHOLDS = [0.7, 0.7, 0.7]
+DEF_THRESHOLDS = [0.7, 0.8, 0.9]
+DEF_NMS_THRESHOLDS = [0.6, 0.6, 0.6]
 
 
 class MTCNN(object):
@@ -94,14 +94,8 @@ class MTCNN(object):
         img_in = tf.image.resize(img, (hs, ws))
         img_in = preprocess(img_in)
         img_in = tf.expand_dims(img_in, 0)
-        img_in = tf.transpose(img_in, (0, 2, 1, 3))
 
         offsets, probs = self.pnet(img_in)
-        # probs: probability of a face at each sliding window
-        # offsets: transformations to true bounding boxes
-        offsets = tf.transpose(offsets, (0, 2, 1, 3))
-        probs = tf.transpose(probs, (0, 2, 1, 3))
-
         boxes = generate_bboxes(probs[0], offsets[0], scale, self.thresholds[0])
         if len(boxes) == 0:
             return boxes
@@ -163,7 +157,6 @@ class MTCNN(object):
             float tensor of shape [n, 4], predicted bounding boxes
         """
         img_boxes = get_image_boxes(bboxes, img, height, width, num_boxes, size=24)
-        img_boxes = tf.transpose(img_boxes, (0, 2, 1, 3))
         offsets, probs = self.rnet(img_boxes)
 
         keep = tf.where(probs[:, 1] > self.thresholds[1])[:, 0]
@@ -202,7 +195,6 @@ class MTCNN(object):
             scores: float tensor of shape [n], confidence scores
         """
         img_boxes = get_image_boxes(bboxes, img, height, width, num_boxes, size=48)
-        img_boxes = tf.transpose(img_boxes, (0, 2, 1, 3))
         landmarks, offsets, probs = self.onet(img_boxes)
 
         keep = tf.where(probs[:, 1] > self.thresholds[2])[:, 0]
