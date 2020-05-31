@@ -114,6 +114,27 @@ class MTCNN(object):
         boxes = tf.gather(boxes, keep)
         return boxes
 
+    @tf.function(
+        input_signature=[tf.TensorSpec(shape=(None, 9), dtype=tf.float32)])
+    def stage_one_filter(self, boxes):
+        """Filter out boxes in stage one
+
+        Parameters:
+            boxes: collected boxes with different scales, float tensor of shape [n, 9]
+
+        Returns:
+            float tensor of shape [n, 4]
+        """
+        bboxes, scores, offsets = boxes[:, :4], boxes[:, 4], boxes[:, 5:]
+        # use offsets predicted by pnet to transform bounding boxes
+        bboxes = calibrate_box(bboxes, offsets)
+        bboxes = convert_to_square(bboxes)
+
+        keep = tf.image.non_max_suppression(bboxes, scores, self.max_output_size,
+                                            iou_threshold=self.nms_thresholds[0])
+        bboxes = tf.gather(bboxes, keep)
+        return bboxes
+
     def stage_one(self, img, scales):
         """Run stage one on the input image
 
@@ -133,17 +154,8 @@ class MTCNN(object):
         # collect boxes (and offsets, and scores) from different scales
         boxes = tf.concat(boxes, 0)
         if boxes.shape[0] == 0:
-            return tf.zeros((0, 4))
-
-        bboxes, scores, offsets = boxes[:, :4], boxes[:, 4], boxes[:, 5:]
-        # use offsets predicted by pnet to transform bounding boxes
-        bboxes = calibrate_box(bboxes, offsets)
-        bboxes = convert_to_square(bboxes)
-
-        keep = tf.image.non_max_suppression(bboxes, scores, self.max_output_size,
-                                            iou_threshold=self.nms_thresholds[0])
-        bboxes = tf.gather(bboxes, keep)
-        return bboxes
+            return []
+        return self.stage_one_filter(boxes)
 
     @tf.function(
         input_signature=[tf.TensorSpec(shape=(None, None, 3), dtype=tf.float32),
