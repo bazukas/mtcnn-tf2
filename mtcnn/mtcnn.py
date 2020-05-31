@@ -21,6 +21,7 @@ class MTCNN(object):
         self.thresholds = thresholds or DEF_THRESHOLDS
         self.nms_thresholds = nms_thresholds or DEF_NMS_THRESHOLDS
         self.max_output_size = max_output_size
+        self.scale_cache = {}
 
     def detect(self, img):
         """Detect faces and facial landmarks on an image
@@ -34,15 +35,17 @@ class MTCNN(object):
                         first 5 numbers of array are x coords, last are y coords
             scores: float tensor of shape [n], confidence scores
         """
+        height, width, _ = img.shape
         img = tf.convert_to_tensor(img, tf.float32)
-        bboxes = self.stage_one(img)
+        scales = self.get_scales(height, width)
+        bboxes = self.stage_one(img, scales)
         if len(bboxes) == 0:
             return [], [], []
-        bboxes = self.stage_two(img, bboxes, img.shape[0], img.shape[1], bboxes.shape[0])
+        bboxes = self.stage_two(img, bboxes, height, width, bboxes.shape[0])
         if len(bboxes) == 0:
             return [], [], []
         bboxes, landmarks, scores = self.stage_three(img, bboxes,
-                                                     img.shape[0], img.shape[1], bboxes.shape[0])
+                                                     height, width, bboxes.shape[0])
         return bboxes, landmarks, scores
 
     def get_scales(self, height, width):
@@ -56,6 +59,10 @@ class MTCNN(object):
             list of floats, scaling factors
         """
         min_length = min(height, width)
+        # typically scaling factors will not change in a video feed
+        if min_length in self.scale_cache:
+            return self.scale_cache[min_length]
+
         min_detection_size = 12
         factor = 0.707  # sqrt(0.5)
         # scales for scaling the image
@@ -70,6 +77,8 @@ class MTCNN(object):
             scales.append(m * factor**factor_count)
             min_length *= factor
             factor_count += 1
+
+        self.scale_cache[min_length] = scales
         return scales
 
     @tf.function(
@@ -105,18 +114,17 @@ class MTCNN(object):
         boxes = tf.gather(boxes, keep)
         return boxes
 
-    def stage_one(self, img):
+    def stage_one(self, img, scales):
         """Run stage one on the input image
 
         Parameters:
             img: rgb image, float tensor of shape [h, w, 3]
+            scales: scaling factors, list of floats
 
         Returns:
             float tensor of shape [n, 4], predicted bounding boxes
         """
         height, width, _ = img.shape
-        scales = self.get_scales(height, width)
-
         boxes = []
 
         # run P-Net on different scales
