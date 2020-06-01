@@ -14,9 +14,9 @@ class MTCNN(object):
                  thresholds=None,
                  nms_thresholds=None,
                  max_output_size=300):
-        self.pnet = PNet.load(pnet_path)
-        self.rnet = RNet.load(rnet_path)
-        self.onet = ONet.load(onet_path)
+        self.pnet = PNet(pnet_path)
+        self.rnet = RNet(rnet_path)
+        self.onet = ONet(onet_path)
         self.min_face_size = min_face_size
         self.thresholds = thresholds or DEF_THRESHOLDS
         self.nms_thresholds = nms_thresholds or DEF_NMS_THRESHOLDS
@@ -104,7 +104,7 @@ class MTCNN(object):
         img_in = preprocess(img_in)
         img_in = tf.expand_dims(img_in, 0)
 
-        offsets, probs = self.pnet(img_in)
+        probs, offsets = self.pnet(img_in)
         boxes = generate_bboxes(probs[0], offsets[0], scale, self.thresholds[0])
         if len(boxes) == 0:
             return boxes
@@ -177,7 +177,7 @@ class MTCNN(object):
             float tensor of shape [n, 4], predicted bounding boxes
         """
         img_boxes = get_image_boxes(bboxes, img, height, width, num_boxes, size=24)
-        offsets, probs = self.rnet(img_boxes)
+        probs, offsets = self.rnet(img_boxes)
 
         keep = tf.where(probs[:, 1] > self.thresholds[1])[:, 0]
         bboxes = tf.gather(bboxes, keep)
@@ -215,7 +215,7 @@ class MTCNN(object):
             scores: float tensor of shape [n], confidence scores
         """
         img_boxes = get_image_boxes(bboxes, img, height, width, num_boxes, size=48)
-        landmarks, offsets, probs = self.onet(img_boxes)
+        probs, offsets, landmarks = self.onet(img_boxes)
 
         keep = tf.where(probs[:, 1] > self.thresholds[2])[:, 0]
         bboxes = tf.gather(bboxes, keep)
