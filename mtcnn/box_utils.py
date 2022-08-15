@@ -18,12 +18,15 @@ def convert_to_square(bboxes):
     dy1 = y1 + h * 0.5 - max_side * 0.5
     dx2 = dx1 + max_side
     dy2 = dy1 + max_side
-    return tf.stack([
-        tf.math.round(dx1),
-        tf.math.round(dy1),
-        tf.math.round(dx2),
-        tf.math.round(dy2),
-    ], 1)
+    return tf.stack(
+        [
+            tf.math.round(dx1),
+            tf.math.round(dy1),
+            tf.math.round(dx2),
+            tf.math.round(dy2),
+        ],
+        1,
+    )
 
 
 def calibrate_box(bboxes, offsets):
@@ -45,7 +48,9 @@ def calibrate_box(bboxes, offsets):
     return bboxes + translation
 
 
-def get_image_boxes(bboxes, img, height, width, num_boxes, size=24):
+def get_image_boxes(
+    bboxes, img, height, width, num_boxes, size=(24, 24), preprocess_output=True
+):
     """Cut out boxes from the image.
 
     Parameters:
@@ -64,10 +69,11 @@ def get_image_boxes(bboxes, img, height, width, num_boxes, size=24):
     x2 = tf.math.minimum(bboxes[:, 2], width) / width
     y2 = tf.math.minimum(bboxes[:, 3], height) / height
     boxes = tf.stack([y1, x1, y2, x2], 1)
-    img_boxes = tf.image.crop_and_resize(tf.expand_dims(img, 0), boxes,
-                                         tf.zeros(num_boxes, dtype=tf.int32),
-                                         (size, size))
-    img_boxes = preprocess(img_boxes)
+    img_boxes = tf.image.crop_and_resize(
+        tf.expand_dims(img, 0), boxes, tf.zeros(num_boxes, dtype=tf.int32), size
+    )
+    if preprocess_output:
+        img_boxes = preprocess(img_boxes)
     return img_boxes
 
 
@@ -104,13 +110,17 @@ def generate_bboxes(probs, offsets, scale, threshold):
     # so we need to rescale bounding boxes back
     inds = tf.cast(inds, tf.float32)
     # bounding_boxes: N x 9
-    bounding_boxes = tf.concat([
-        tf.expand_dims(tf.math.round((stride * inds[:, 1]) / scale), 1),
-        tf.expand_dims(tf.math.round((stride * inds[:, 0]) / scale), 1),
-        tf.expand_dims(tf.math.round((stride * inds[:, 1] + cell_size) / scale), 1),
-        tf.expand_dims(tf.math.round((stride * inds[:, 0] + cell_size) / scale), 1),
-        score, offsets
-    ], 1)
+    bounding_boxes = tf.concat(
+        [
+            tf.expand_dims(tf.math.round((stride * inds[:, 1]) / scale), 1),
+            tf.expand_dims(tf.math.round((stride * inds[:, 0]) / scale), 1),
+            tf.expand_dims(tf.math.round((stride * inds[:, 1] + cell_size) / scale), 1),
+            tf.expand_dims(tf.math.round((stride * inds[:, 0] + cell_size) / scale), 1),
+            score,
+            offsets,
+        ],
+        1,
+    )
     return bounding_boxes
 
 
